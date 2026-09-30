@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "vwbhist: compare demo workbenches",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/vwbhist/vwbhist.py",
+      "args": ["compare", "workbenches/six_step_to_PWM.pVWB", "workbenches/EPT_SC_demo.pVWB"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "vwbhist: diff Test.pVWB",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/vwbhist/vwbhist.py",
+      "args": ["diff", "workbenches/Test.pVWB"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "selftest",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tests/selftest.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+__pycache__/
+reports/*
+!reports/README.txt
+gitdemo/
+workbenches/Test.pVWB
+workbenches/*_history/
+.vscode/

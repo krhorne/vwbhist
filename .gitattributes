@@ -1,0 +1,6 @@
+# Windows batch files need CRLF line endings
+*.bat text eol=crlf
+# Workbenches are binary; with vwbhist set up as a diff driver (see vwbhist/README.txt) git shows readable setting diffs
+*.pVWB binary diff=pvwb
+*.pSet binary diff=pvwb
+*.docx binary
