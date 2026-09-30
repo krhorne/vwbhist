@@ -5,9 +5,12 @@
 > itself before relying on a result.
 
 vwbhist compares HBK Perception virtual workbenches (`.pVWB`) and settings files (`.pSet`) setting by setting,
-and can keep a version history of them. Only the **setup** counts: hardware settings, RT-FDB formulas,
-ePower/eDrive configuration, the formula database, the info sheet and the sheet list. Window positions and
-recording numbers are ignored. It only reads your workbench files and never changes them.
+and can keep a version history of them. It comes with a **GUI** (a Windows window, no typing needed) and a
+command line. Only the **setup** counts: hardware settings, RT-FDB formulas, ePower/eDrive configuration, the
+formula database, the info sheet and the sheet list. Window positions and recording numbers are ignored. It
+only reads your workbench files and never changes them.
+
+![The vwbhist GUI: every workbench in a folder compared with a master reference](docs/vwbhist_gui.png)
 
 ## Install
 1. Install Python 3.8 or newer from python.org. No other packages are needed.
@@ -15,8 +18,9 @@ recording numbers are ignored. It only reads your workbench files and never chan
 2. Download this repository (**Code → Download ZIP**) and copy the `vwbhist` folder somewhere, for example
    `C:\Tools\vwbhist`.
 
-## The window
-Double-click `vwbhist/vwbhist_gui.bat`, or drag a folder or a `.pVWB` file onto it. Hover the mouse over any
+## GUI (graphical window)
+Start the GUI by double-clicking `vwbhist/vwbhist_gui.bat`, or drag a folder or a `.pVWB` file onto it. From a
+command prompt, `python vwbhist_gui.py` also works. It has three tabs. Hover the mouse over any
 button for a hint, press **F1** for help on the current tab, and click **About** for the version and support
 status.
 
