@@ -25,9 +25,12 @@ FILETYPES = [('Perception workbench', '*.pVWB *.pSet'), ('All files', '*.*')]
 COLS = [('version', 'Version', 220), ('time', 'Saved', 140), ('user', 'User', 90),
         ('summary', 'Summary', 330), ('note', 'Note', 260)]
 LIGHT = dict(text_bg='#ffffff', text_fg='#1f2328', sec='#0550ae', chg='#9a6700', rem='#cf222e', add='#1a7f37',
-             hint='#6e7781')
+             hint='#6e7781', tip_bg='#fbfbfb', tip_fg='#1f2328', tip_border='#c9c9c9')
 DARK = dict(text_bg='#1c1c1c', text_fg='#e6edf3', sec='#79c0ff', chg='#e3b341', rem='#ff7b72', add='#56d364',
-            hint='#9a9a9a')
+            hint='#9a9a9a', tip_bg='#2b2b2b', tip_fg='#e6edf3', tip_border='#4a4a4a')
+APP_VERSION = '0.9 beta'
+AUTHOR = 'Kevin Horne'
+REPO_URL = 'https://github.com/krhorne/vwbhist'
 CFG = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'vwbhist', 'gui.json')
 
 
@@ -103,6 +106,146 @@ def save_cfg(cfg):
 
 
 # ----------------------------------------------------------------------------------------------
+# Hover help
+# ----------------------------------------------------------------------------------------------
+class Tip:
+    """Small help popup shown when the mouse rests on a widget. text may be a function(event) -> str
+    for widgets whose help depends on what is under the mouse (tree rows)."""
+    pal = LIGHT
+    DELAY = 600
+
+    def __init__(self, widget, text):
+        self.w, self.text, self.win, self.job, self.cur = widget, text, None, None, None
+        widget.bind('<Enter>', self.enter, add='+')
+        widget.bind('<Leave>', self.hide, add='+')
+        widget.bind('<ButtonPress>', self.hide, add='+')
+        if callable(text):
+            widget.bind('<Motion>', self.moved, add='+')
+
+    def enter(self, e):
+        if not callable(self.text):
+            self.hide()
+            self.cur = self.text
+            self.job = self.w.after(self.DELAY, self.show)
+
+    def moved(self, e):
+        t = self.text(e)
+        if t != self.cur:
+            self.hide()
+            self.cur = t
+            if t:
+                self.job = self.w.after(self.DELAY, self.show)
+
+    def show(self):
+        self.job = None
+        if not self.cur or not self.w.winfo_exists():
+            return
+        c = Tip.pal
+        x, y = self.w.winfo_pointerxy()
+        win = self.win = tk.Toplevel(self.w)
+        win.overrideredirect(True)
+        win.attributes('-topmost', True)
+        tk.Label(win, text=self.cur, justify='left', wraplength=420, bg=c['tip_bg'], fg=c['tip_fg'],
+                 font=('Segoe UI', 9), padx=8, pady=5, highlightthickness=1,
+                 highlightbackground=c['tip_border']).pack()
+        win.update_idletasks()
+        x = min(x + 12, win.winfo_screenwidth() - win.winfo_reqwidth() - 4)
+        y = y + 20 if y + 20 + win.winfo_reqheight() < win.winfo_screenheight() else y - win.winfo_reqheight() - 8
+        win.geometry('+%d+%d' % (x, y))
+
+    def hide(self, e=None):
+        if self.job:
+            self.w.after_cancel(self.job)
+            self.job = None
+        if self.win:
+            self.win.destroy()
+            self.win = None
+        if e is not None and e.type == tk.EventType.Leave:
+            self.cur = None
+
+
+def tip(widget, text):
+    Tip(widget, text)
+    return widget
+
+
+TREE_TIPS = {
+    'ref': 'The master reference. Every other workbench is compared with this file.\n'
+           'To change it: right-click another file -> Set as reference.',
+    'same': 'Setup is identical to the reference.\n(Window positions and recording numbers are ignored.)',
+    'diff': 'Setup differs from the reference. Click to list every difference in the report below; '
+            'double-click to open the report in its own window.',
+    'err': 'This file could not be read - it may be damaged, still being saved, or not a Perception workbench.',
+    'pending': 'Being compared with the reference...',
+}
+
+HELP = """# vwbhist help
+
+vwbhist compares Perception workbench (.pVWB) and settings (.pSet) files setting by setting and can keep a
+version history of them. Your workbench files are only ever read, never changed.
+Hover the mouse over any button or field for a short hint. Press F1 to open this help at the current tab.
+Type in the Filter box above to search this help.
+
+## Folder vs reference tab
+Checks that every workbench in a folder (e.g. one per test cell) matches a master "golden" setup.
+1. Folder: click Browse... and pick the folder that holds the workbenches. Sub-folders are included;
+   <name>_history folders are hidden.
+2. Reference: select the master workbench in the tree and click "Use selected file"
+   (or right-click it -> Set as reference, or Browse... to a master stored somewhere else).
+3. Every other file is then compared with the reference:
+     \u2605 reference            the master file
+     \u2713 same as reference    identical setup
+     \u2260 N differences        click it to list every difference in the report pane
+     cannot read          damaged, still being saved, or not a workbench
+   Folder rows show how many files in them differ; the top right shows the totals.
+4. Click a file to see its report below. Double-click opens it in its own window.
+   Right-click a file for: set as reference, version history, open in Perception, open its folder.
+Leave the window open while you work: files are re-checked every few seconds, and a file saved from Perception
+shows its new result straight away. The folder and its reference are remembered for next time.
+Tick "Also keep a version history" to also save a copy of each workbench every time its setup changes
+(see the History tab). Untick it to only compare - then nothing is written anywhere.
+
+## History tab
+Versions of one workbench over time. Pick it with Browse... (or right-click a file in the folder tree ->
+Version history...).
+- Snapshot now saves the current file as a new version, with an optional note. Nothing is saved if the setup
+  has not changed since the last version.
+- Select one version and click Show changes (or double-click it): what changed in that save.
+- Select two versions (Ctrl+click) and click Show changes: everything that differs between them.
+- Selected vs file on disk: what has changed since that version, including edits not yet saved as a version.
+- View settings: the full setup of a version (or of the current file) as text.
+- Roll back: select a version, click Open in Perception, then save it from Perception under the working name.
+
+## Compare two files tab
+Any two workbenches, e.g. two test cells or a colleague's file vs yours. Pick A (before) and B (after) and click
+Compare. Swap A/B reverses the direction of the report.
+
+## Reading a report
+The first line gives the total number of setup differences. Differences are grouped by section (Hardware
+settings, RT-FDB formulas, ePower / eDrive setup, ...), each with its own counts. Each line is one setting:
+  ~ [group] Ch[Ch A1]/ModeSpecific/Scaling/Units: A  ->  V        changed: old value -> new value
+  - [group] Ch[Ch B3]/...                                        only in the first file (removed)
+  + [group] Ch[Ch B4]/...                                        only in the second file (added)
+Filter: type e.g. Ch A1, Trigger or u_1 to show only matching lines. Save report... writes it to a text file.
+
+## What counts as a change
+Only the measurement setup: hardware and channel settings, RT-FDB formulas, ePower/eDrive configuration, the
+formula database, info sheet and the list of sheets. Window positions, display layout, recording numbers and
+similar are ignored - tick "Include display/layout details" (bottom right) to include them.
+Perception stores some values as codes rather than units (e.g. DebounceFilterTime, Mode, InputCoupling);
+the report shows the stored code. To learn a code, change one value in Perception, save, and compare.
+
+## Where things are stored
+Versions are kept next to each workbench in <name>_history\\ :
+  history.log                 one line per version: file, time, Windows user, summary, note
+  vNNNN_<date>_<time>.pVWB    exact copy of the workbench (open it in Perception to roll back)
+  vNNNN_....settings.txt      the full setup as text
+  vNNNN_....changes.txt       what changed against the previous version
+The chosen folder and reference are remembered in %APPDATA%\\vwbhist\\gui.json.
+"""
+
+
+# ----------------------------------------------------------------------------------------------
 # Report pane: colour-coded report text with a filter box and Save
 # ----------------------------------------------------------------------------------------------
 class ReportView(ttk.Frame):
@@ -113,10 +256,13 @@ class ReportView(ttk.Frame):
         bar.pack(fill='x', pady=(0, 4))
         self.heading = ttk.Label(bar, text='Report', font=('Segoe UI', 10, 'bold'))
         self.heading.pack(side='left')
-        ttk.Button(bar, text='Save report...', command=self.save).pack(side='right')
+        tip(ttk.Button(bar, text='Save report...', command=self.save),
+            'Save the whole report as a text file, e.g. to attach to a test log.').pack(side='right')
         self.filt = tk.StringVar()
         self.filt.trace_add('write', lambda *_: self.render())
-        ttk.Entry(bar, textvariable=self.filt, width=30).pack(side='right', padx=4)
+        tip(ttk.Entry(bar, textvariable=self.filt, width=30),
+            'Show only lines containing this text, e.g. "Ch A1", "Trigger" or "u_1".\n'
+            'Section headings stay visible. Clear it to see everything.').pack(side='right', padx=4)
         ttk.Label(bar, text='Filter:').pack(side='right')
         tf = ttk.Frame(self)
         tf.pack(fill='both', expand=True)
@@ -202,23 +348,30 @@ class FolderView(ttk.Frame):
         g = ttk.Frame(self)
         g.pack(fill='x')
         ttk.Label(g, text='Folder:').grid(row=0, column=0, sticky='w')
-        e = ttk.Entry(g, textvariable=self.folder)
+        e = tip(ttk.Entry(g, textvariable=self.folder), 'The folder that holds your workbenches (.pVWB / .pSet). '
+                'Sub-folders are included.\nType a path and press Enter, or use Browse...')
         e.grid(row=0, column=1, sticky='ew', padx=4)
         e.bind('<Return>', lambda _: self.load())
-        ttk.Button(g, text='Browse...', command=self.browse_folder).grid(row=0, column=2, sticky='ew')
+        tip(ttk.Button(g, text='Browse...', command=self.browse_folder), 'Choose the folder to check.').grid(row=0, column=2, sticky='ew')
         ttk.Label(g, text='Reference:').grid(row=1, column=0, sticky='w', pady=(4, 0))
-        e = ttk.Entry(g, textvariable=self.ref)
+        e = tip(ttk.Entry(g, textvariable=self.ref), 'The master ("golden") workbench that every other file is '
+                'compared with.')
         e.grid(row=1, column=1, sticky='ew', padx=4, pady=(4, 0))
         e.bind('<Return>', lambda _: self.set_ref(clean(self.ref.get())))
-        ttk.Button(g, text='Browse...', command=self.browse_ref).grid(row=1, column=2, sticky='ew', pady=(4, 0))
-        ttk.Button(g, text='Use selected file', command=self.use_selected).grid(row=1, column=3, padx=(4, 0), pady=(4, 0))
+        tip(ttk.Button(g, text='Browse...', command=self.browse_ref),
+            'Pick the master workbench file - it may also be outside the folder.').grid(row=1, column=2, sticky='ew', pady=(4, 0))
+        tip(ttk.Button(g, text='Use selected file', command=self.use_selected),
+            'Make the file selected in the tree below the master reference.').grid(row=1, column=3, padx=(4, 0), pady=(4, 0))
         g.columnconfigure(1, weight=1)
 
         opt = ttk.Frame(self)
         opt.pack(fill='x', pady=(6, 2))
-        ttk.Checkbutton(opt, text='Also keep a version history (saves a copy in <name>_history each time a file changes)',
-                        variable=self.record, command=self.record_changed).pack(side='left')
-        ttk.Label(opt, textvariable=self.summary, font=('Segoe UI', 9, 'bold')).pack(side='right')
+        tip(ttk.Checkbutton(opt, text='Also keep a version history (saves a copy in <name>_history each time a file changes)',
+                            variable=self.record, command=self.record_changed),
+            'On: every time a workbench changes, a copy is saved next to it so you can see its history '
+            'and roll back (History tab).\nOff: only compare - nothing is written.').pack(side='left')
+        tip(ttk.Label(opt, textvariable=self.summary, font=('Segoe UI', 9, 'bold')),
+            'How many workbenches match the reference.').pack(side='right')
         ttk.Label(self, foreground=self.app.pal['hint'], text='Click a file to see how it differs from the reference - double-click opens '
                   'the report in its own window, right-click for more. Files are re-checked automatically when saved.'
                   ).pack(anchor='w', pady=(0, 4))
@@ -248,6 +401,16 @@ class FolderView(ttk.Frame):
         t.bind('<<TreeviewSelect>>', lambda _: self.show_selected())
         t.bind('<Double-1>', lambda _: self.popup_selected())
         t.bind('<Button-3>', self.context_menu)
+        Tip(t, self.tree_tip)
+
+    def tree_tip(self, e):
+        iid = self.tree.identify_row(e.y)
+        if not iid:
+            return ''
+        if iid.startswith('dir:'):
+            return 'Sub-folder: how many workbenches in it (and below it) differ from the reference.'
+        tags = self.tree.item(iid, 'tags')
+        return TREE_TIPS.get(tags[0] if tags else '', '')
 
     # -------------------------------------------------------------- choosing folder / reference
     def browse_folder(self):
@@ -522,7 +685,7 @@ class FolderView(ttk.Frame):
 class App(tk.Tk):
     def __init__(self, target=''):
         super().__init__()
-        self.title('vwbhist - Perception workbench history')
+        self.title('vwbhist %s - Perception workbench history' % APP_VERSION)
         self.geometry('1150x800')
         self.minsize(800, 500)
         self.dark = windows_dark() and sv_ttk is not None
@@ -531,6 +694,8 @@ class App(tk.Tk):
             apply_theme(self, self.dark)
         if self.dark:
             dark_title_bar(self)
+        Tip.pal = self.pal
+        self.bind_all('<F1>', lambda _: self.help())
         self.q = queue.Queue()
         self.busy = 0
         self.rows = []
@@ -555,7 +720,13 @@ class App(tk.Tk):
     def _build(self):
         bottom = ttk.Frame(self)
         bottom.pack(fill='x', side='bottom')
-        ttk.Checkbutton(bottom, text='Include display/layout details', variable=self.verbose).pack(side='right', padx=6)
+        tip(ttk.Button(bottom, text='About', command=self.about, width=7),
+            'Version, developer and support status.').pack(side='right', padx=(0, 6))
+        tip(ttk.Button(bottom, text='? Help', command=self.help, width=7),
+            'How to use vwbhist (F1).').pack(side='right', padx=(0, 4))
+        tip(ttk.Checkbutton(bottom, text='Include display/layout details', variable=self.verbose),
+            'Also compare display layout, window positions and similar details.\n'
+            'Off: only real setup changes are reported.').pack(side='right', padx=6)
         ttk.Label(bottom, textvariable=self.status, relief='sunken', anchor='w', padding=(6, 2)).pack(fill='x', side='left', expand=True)
 
         pw = ttk.PanedWindow(self, orient='vertical')
@@ -575,26 +746,40 @@ class App(tk.Tk):
         top = ttk.Frame(f)
         top.pack(fill='x', pady=(0, 6))
         ttk.Label(top, text='Workbench:').pack(side='left')
-        e = ttk.Entry(top, textvariable=self.wb)
+        e = tip(ttk.Entry(top, textvariable=self.wb), 'The workbench whose history you want to see.\n'
+                'Type a path and press Enter, or use Browse...')
         e.pack(side='left', fill='x', expand=True, padx=4)
         e.bind('<Return>', lambda _: self.refresh())
-        ttk.Button(top, text='Browse...', command=self.browse_wb).pack(side='left')
+        tip(ttk.Button(top, text='Browse...', command=self.browse_wb), 'Choose a workbench.').pack(side='left')
 
         bar = ttk.Frame(f)
         bar.pack(fill='x')
-        ttk.Button(bar, text='Snapshot now', command=self.do_snapshot).pack(side='left')
+        tip(ttk.Button(bar, text='Snapshot now', command=self.do_snapshot),
+            'Save the workbench as it is now as a new version.\n'
+            'Nothing is saved if its setup has not changed since the last version.').pack(side='left')
         ttk.Label(bar, text='Note:').pack(side='left', padx=(8, 2))
-        self.note = ttk.Entry(bar, width=36)
+        self.note = tip(ttk.Entry(bar, width=36), 'Optional note stored with the version, '
+                        'e.g. "set min pulse width to 5 us".\nPress Enter to take the snapshot.')
         self.note.pack(side='left')
         self.note.bind('<Return>', lambda _: self.do_snapshot())
         ttk.Separator(bar, orient='vertical').pack(side='left', fill='y', padx=10)
-        ttk.Button(bar, text='Show changes', command=self.do_changes).pack(side='left')
-        ttk.Button(bar, text='Selected vs file on disk', command=self.do_vs_current).pack(side='left', padx=4)
-        ttk.Button(bar, text='View settings', command=self.do_settings).pack(side='left')
+        tip(ttk.Button(bar, text='Show changes', command=self.do_changes),
+            'One version selected: what changed in that save.\n'
+            'Two selected (Ctrl+click): everything that differs between them.\n'
+            'Nothing selected: the last save.').pack(side='left')
+        tip(ttk.Button(bar, text='Selected vs file on disk', command=self.do_vs_current),
+            'What differs between the selected version (or the latest one) and the workbench file as it is now.'
+            ).pack(side='left', padx=4)
+        tip(ttk.Button(bar, text='View settings', command=self.do_settings),
+            'The full setup of the selected version as text - or of the current file if nothing is selected.'
+            ).pack(side='left')
         ttk.Separator(bar, orient='vertical').pack(side='left', fill='y', padx=10)
-        ttk.Button(bar, text='Open in Perception', command=self.open_version).pack(side='left')
-        ttk.Button(bar, text='History folder', command=self.open_folder).pack(side='left', padx=4)
-        ttk.Button(bar, text='Refresh', command=self.refresh).pack(side='right')
+        tip(ttk.Button(bar, text='Open in Perception', command=self.open_version),
+            'Open the selected version in Perception.\n'
+            'To roll back, save it from Perception under the working name.').pack(side='left')
+        tip(ttk.Button(bar, text='History folder', command=self.open_folder),
+            'Open the <name>_history folder with all saved copies and text reports.').pack(side='left', padx=4)
+        tip(ttk.Button(bar, text='Refresh', command=self.refresh), 'Re-read the list of versions.').pack(side='right')
 
         ttk.Label(f, foreground=self.pal['hint'], text='Select one version to see what changed in it, two (Ctrl+click) to compare them. '
                   'Double-click = show changes.').pack(anchor='w', pady=(6, 2))
@@ -609,6 +794,8 @@ class App(tk.Tk):
         self.tree.pack(side='left', fill='both', expand=True)
         sb.pack(side='left', fill='y')
         self.tree.bind('<Double-1>', lambda _: self.do_changes())
+        Tip(self.tree, lambda e: 'Saved versions, oldest first. Double-click one to see what changed in it; '
+            'Ctrl+click two and click Show changes to compare them.' if self.tree.identify_row(e.y) else '')
         return f
 
     def _compare_tab(self, parent):
@@ -616,13 +803,16 @@ class App(tk.Tk):
         self.cmp = [tk.StringVar(), tk.StringVar()]
         for i, lab in enumerate(('Workbench A (before):', 'Workbench B (after):')):
             ttk.Label(f, text=lab).grid(row=i, column=0, sticky='w', pady=3)
-            ttk.Entry(f, textvariable=self.cmp[i]).grid(row=i, column=1, sticky='ew', padx=4)
-            ttk.Button(f, text='Browse...', command=lambda i=i: self.browse_cmp(i)).grid(row=i, column=2)
+            what = ('The "before" workbench.', 'The "after" workbench.')[i]
+            tip(ttk.Entry(f, textvariable=self.cmp[i]), what).grid(row=i, column=1, sticky='ew', padx=4)
+            tip(ttk.Button(f, text='Browse...', command=lambda i=i: self.browse_cmp(i)), what).grid(row=i, column=2)
         f.columnconfigure(1, weight=1)
         bar = ttk.Frame(f)
         bar.grid(row=2, column=1, sticky='w', pady=8)
-        ttk.Button(bar, text='Compare', command=self.do_compare).pack(side='left')
-        ttk.Button(bar, text='Swap A/B', command=self.swap_cmp).pack(side='left', padx=4)
+        tip(ttk.Button(bar, text='Compare', command=self.do_compare),
+            'List every setup difference from A to B.').pack(side='left')
+        tip(ttk.Button(bar, text='Swap A/B', command=self.swap_cmp),
+            'Swap A and B, so the report reads the other way round.').pack(side='left', padx=4)
         ttk.Label(f, foreground=self.pal['hint'], text='Use this for two test cells, or a colleague\'s workbench vs yours. '
                   'Files are only read.').grid(row=3, column=1, sticky='w')
         return f
@@ -679,6 +869,53 @@ class App(tk.Tk):
         rv = ReportView(w, self)
         rv.pack(fill='both', expand=True, padx=8, pady=8)
         rv.show(title, text)
+        return rv
+
+    def help(self):
+        """Help window, scrolled to the section for the tab in front."""
+        rv = self.popup('vwbhist help', HELP)
+        rv.text.config(wrap='word', font=('Segoe UI', 10))
+        rv.text.tag_configure('head', font=('Segoe UI', 13, 'bold'))
+        rv.text.tag_configure('sec', font=('Segoe UI', 11, 'bold'))
+        for tag in ('chg', 'rem', 'add'):
+            rv.text.tag_configure(tag, font=('Consolas', 10))
+        tab = self.nb.index('current')
+        pos = rv.text.search(('## Folder vs reference', '## History tab', '## Compare two files')[tab], '1.0')
+        if pos and tab:
+            rv.text.yview(pos)
+
+    def about(self):
+        w = tk.Toplevel(self)
+        w.title('About vwbhist')
+        w.resizable(False, False)
+        w.transient(self)
+        if self.dark:
+            dark_title_bar(w)
+        f = ttk.Frame(w, padding=(24, 18))
+        f.pack(fill='both', expand=True)
+        ttk.Label(f, text='vwbhist', font=('Segoe UI', 18, 'bold')).pack(anchor='w')
+        ttk.Label(f, text='Version %s' % APP_VERSION).pack(anchor='w')
+        ttk.Label(f, text='Version history and setup comparison for HBK Perception workbenches (.pVWB / .pSet).',
+                  wraplength=440, justify='left').pack(anchor='w', pady=(10, 0))
+        ttk.Label(f, text='Developed by ' + AUTHOR, font=('Segoe UI', 10, 'bold')).pack(anchor='w', pady=(10, 0))
+        ttk.Label(f, text='BETA - UNSUPPORTED', font=('Segoe UI', 11, 'bold'),
+                  foreground=self.pal['rem']).pack(anchor='w', pady=(14, 2))
+        ttk.Label(f, wraplength=440, justify='left', text=(
+            'This is a beta project and is provided as is, without support or warranty of any kind. '
+            'It is not an official HBK product and is not supported by HBK. '
+            'Check important settings in Perception itself before relying on a result.\n\n'
+            'Your workbench files are only ever read, never changed.')).pack(anchor='w')
+        link = ttk.Label(f, text=REPO_URL, foreground=self.pal['sec'], cursor='hand2')
+        link.pack(anchor='w', pady=(12, 0))
+        link.bind('<Button-1>', lambda _: __import__('webbrowser').open(REPO_URL))
+        tip(link, 'Source code and updates (opens in your browser).')
+        ttk.Button(f, text='OK', command=w.destroy, width=10).pack(anchor='e', pady=(16, 0))
+        w.bind('<Escape>', lambda _: w.destroy())
+        w.update_idletasks()
+        w.geometry('+%d+%d' % (self.winfo_rootx() + (self.winfo_width() - w.winfo_reqwidth()) // 2,
+                               self.winfo_rooty() + (self.winfo_height() - w.winfo_reqheight()) // 3))
+        w.grab_set()
+        w.focus_set()
 
     # ------------------------------------------------------------------ history tab
     def browse_wb(self):
