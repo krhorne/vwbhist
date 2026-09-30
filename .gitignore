@@ -1,7 +1,17 @@
 __pycache__/
-reports/*
-!reports/README.txt
 gitdemo/
+reports/
+.vscode/
 workbenches/Test.pVWB
 workbenches/*_history/
-.vscode/
+
+# local test-bench files, not published
+vscode_config/
+vwbhist-test.code-workspace
+install_vscode_config.bat
+tests/git_setup.py
+tests/workcopy.py
+vwbhist/snapshot_now.bat
+vwbhist/show_last_change.bat
+vwbhist/watch_workbenches.bat
+vwbhist/README.txt

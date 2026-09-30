@@ -1,5 +1,0 @@
-{
-  "files.associations": { "*.settings.txt": "properties", "*.changes.txt": "diff", "history.log": "log" },
-  "files.exclude": { "**/__pycache__": true },
-  "python.analysis.extraPaths": ["./vwbhist"]
-}
