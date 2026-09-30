@@ -16,10 +16,18 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, font as tkfont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vwbhist as V  # noqa: E402
+try:
+    import sv_ttk  # optional Windows 11 look (pip install sv-ttk); plain Tk look without it
+except ImportError:
+    sv_ttk = None
 
 FILETYPES = [('Perception workbench', '*.pVWB *.pSet'), ('All files', '*.*')]
 COLS = [('version', 'Version', 220), ('time', 'Saved', 140), ('user', 'User', 90),
         ('summary', 'Summary', 330), ('note', 'Note', 260)]
+LIGHT = dict(text_bg='#ffffff', text_fg='#1f2328', sec='#0550ae', chg='#9a6700', rem='#cf222e', add='#1a7f37',
+             hint='#6e7781')
+DARK = dict(text_bg='#1c1c1c', text_fg='#e6edf3', sec='#79c0ff', chg='#e3b341', rem='#ff7b72', add='#56d364',
+            hint='#9a9a9a')
 CFG = os.path.join(os.environ.get('APPDATA') or os.path.expanduser('~'), 'vwbhist', 'gui.json')
 
 
@@ -47,6 +55,36 @@ def stat_key(p):
         return s.st_mtime, s.st_size
     except OSError:
         return None
+
+
+def windows_dark():
+    try:
+        import winreg
+        k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize')
+        return winreg.QueryValueEx(k, 'AppsUseLightTheme')[0] == 0
+    except Exception:
+        return False
+
+
+def dark_title_bar(win):
+    try:
+        import ctypes
+        win.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(win.winfo_id())
+        on = ctypes.c_int(1)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(on), ctypes.sizeof(on))
+    except Exception:
+        pass
+
+
+def apply_theme(root, dark):
+    """sv-ttk theme. Its colours hang off a <<ThemeChanged>> event that does not reach the root window on
+    current Tk builds, so apply them directly."""
+    sv_ttk.set_theme('dark' if dark else 'light')
+    try:
+        root.tk.call('configure_colors')
+    except tk.TclError:
+        pass
 
 
 def load_cfg():
@@ -82,7 +120,10 @@ class ReportView(ttk.Frame):
         ttk.Label(bar, text='Filter:').pack(side='right')
         tf = ttk.Frame(self)
         tf.pack(fill='both', expand=True)
-        t = self.text = tk.Text(tf, wrap='none', font=('Consolas', 10), state='disabled', undo=False)
+        c = app.pal
+        t = self.text = tk.Text(tf, wrap='none', font=('Consolas', 10), state='disabled', undo=False, bd=0,
+                                highlightthickness=0, padx=6, pady=4, bg=c['text_bg'], fg=c['text_fg'],
+                                insertbackground=c['text_fg'])
         sy = ttk.Scrollbar(tf, orient='vertical', command=t.yview)
         sx = ttk.Scrollbar(tf, orient='horizontal', command=t.xview)
         t.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
@@ -90,10 +131,10 @@ class ReportView(ttk.Frame):
         sx.pack(side='bottom', fill='x')
         t.pack(side='left', fill='both', expand=True)
         t.tag_configure('head', font=('Consolas', 11, 'bold'))
-        t.tag_configure('sec', font=('Consolas', 10, 'bold'), foreground='#0550ae')
-        t.tag_configure('chg', foreground='#9a6700')
-        t.tag_configure('rem', foreground='#cf222e')
-        t.tag_configure('add', foreground='#1a7f37')
+        t.tag_configure('sec', font=('Consolas', 10, 'bold'), foreground=c['sec'])
+        t.tag_configure('chg', foreground=c['chg'])
+        t.tag_configure('rem', foreground=c['rem'])
+        t.tag_configure('add', foreground=c['add'])
 
     def show(self, title, text):
         self.heading.config(text=title)
@@ -178,7 +219,7 @@ class FolderView(ttk.Frame):
         ttk.Checkbutton(opt, text='Also keep a version history (saves a copy in <name>_history each time a file changes)',
                         variable=self.record, command=self.record_changed).pack(side='left')
         ttk.Label(opt, textvariable=self.summary, font=('Segoe UI', 9, 'bold')).pack(side='right')
-        ttk.Label(self, foreground='gray', text='Click a file to see how it differs from the reference - double-click opens '
+        ttk.Label(self, foreground=self.app.pal['hint'], text='Click a file to see how it differs from the reference - double-click opens '
                   'the report in its own window, right-click for more. Files are re-checked automatically when saved.'
                   ).pack(anchor='w', pady=(0, 4))
 
@@ -198,11 +239,12 @@ class FolderView(ttk.Frame):
         bold = tkfont.nametofont('TkDefaultFont').copy()
         bold.configure(weight='bold')
         t.tag_configure('dir', font=bold)
-        t.tag_configure('ref', font=bold, foreground='#0550ae')
-        t.tag_configure('same', foreground='#1a7f37')
-        t.tag_configure('diff', foreground='#9a6700')
-        t.tag_configure('err', foreground='#cf222e')
-        t.tag_configure('pending', foreground='gray')
+        c = self.app.pal
+        t.tag_configure('ref', font=bold, foreground=c['sec'])
+        t.tag_configure('same', foreground=c['add'])
+        t.tag_configure('diff', foreground=c['chg'])
+        t.tag_configure('err', foreground=c['rem'])
+        t.tag_configure('pending', foreground=c['hint'])
         t.bind('<<TreeviewSelect>>', lambda _: self.show_selected())
         t.bind('<Double-1>', lambda _: self.popup_selected())
         t.bind('<Button-3>', self.context_menu)
@@ -483,6 +525,12 @@ class App(tk.Tk):
         self.title('vwbhist - Perception workbench history')
         self.geometry('1150x800')
         self.minsize(800, 500)
+        self.dark = windows_dark() and sv_ttk is not None
+        self.pal = DARK if self.dark else LIGHT
+        if sv_ttk:
+            apply_theme(self, self.dark)
+        if self.dark:
+            dark_title_bar(self)
         self.q = queue.Queue()
         self.busy = 0
         self.rows = []
@@ -548,7 +596,7 @@ class App(tk.Tk):
         ttk.Button(bar, text='History folder', command=self.open_folder).pack(side='left', padx=4)
         ttk.Button(bar, text='Refresh', command=self.refresh).pack(side='right')
 
-        ttk.Label(f, foreground='gray', text='Select one version to see what changed in it, two (Ctrl+click) to compare them. '
+        ttk.Label(f, foreground=self.pal['hint'], text='Select one version to see what changed in it, two (Ctrl+click) to compare them. '
                   'Double-click = show changes.').pack(anchor='w', pady=(6, 2))
         tf = ttk.Frame(f)
         tf.pack(fill='both', expand=True)
@@ -575,7 +623,7 @@ class App(tk.Tk):
         bar.grid(row=2, column=1, sticky='w', pady=8)
         ttk.Button(bar, text='Compare', command=self.do_compare).pack(side='left')
         ttk.Button(bar, text='Swap A/B', command=self.swap_cmp).pack(side='left', padx=4)
-        ttk.Label(f, foreground='gray', text='Use this for two test cells, or a colleague\'s workbench vs yours. '
+        ttk.Label(f, foreground=self.pal['hint'], text='Use this for two test cells, or a colleague\'s workbench vs yours. '
                   'Files are only read.').grid(row=3, column=1, sticky='w')
         return f
 
@@ -626,6 +674,8 @@ class App(tk.Tk):
         w = tk.Toplevel(self)
         w.title(title)
         w.geometry('1000x600')
+        if self.dark:
+            dark_title_bar(w)
         rv = ReportView(w, self)
         rv.pack(fill='both', expand=True, padx=8, pady=8)
         rv.show(title, text)

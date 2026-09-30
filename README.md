@@ -39,4 +39,4 @@ minimum pulse width on the speed channel), File -> Save virtual workbench, then 
 **Snapshot** + **Diff**. This is also how to calibrate the stored codes
 (`DebounceFilterTime`, `Mode`, `InputCoupling`): change one value per save and note the code.
 
-Requires Python 3.8+ on PATH (`python --version`). Debug configs are in `.vscode/launch.json`.
+Requires Python 3.8+ on PATH (`python --version`). Optional: `pip install sv-ttk` gives the GUI a Windows 11 look (it falls back to the plain look without it). Debug configs are in `.vscode/launch.json`.

@@ -12,6 +12,7 @@ What it does
 
 Requirements
   Windows PC with Python 3.8 or newer (python.org). No extra packages.
+  Optional, for a modern Windows 11 look (light/dark follows Windows):  pip install sv-ttk
 
 Quick start
   0. Prefer windows to typing? Double-click  vwbhist_gui.bat  (or drag a folder / .pVWB onto it).
